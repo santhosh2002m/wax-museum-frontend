@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -7,6 +7,7 @@ import {
   Award,
   TrendingUp,
   Users,
+  Loader,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,95 +29,87 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useApi } from "@/contexts/ApiContext";
+import { Guide as ApiGuide } from "@/contexts/ApiContext";
 
 interface Guide {
   id: string;
   name: string;
   number: string;
-  vehicleType: string;
+  vehicle_type: string;
   score: number;
-  totalBookings: number;
+  total_bookings: number;
   rating: number;
   status: "active" | "inactive";
 }
 
-// Mock data - in a real app, this would come from an API
-const mockGuides: Guide[] = [
-  {
-    id: "1",
-    name: "Rahman",
-    number: "9019296034",
-    vehicleType: "guide",
-    score: 646,
-    totalBookings: 23,
-    rating: 4.8,
-    status: "active",
-  },
-  {
-    id: "2",
-    name: "Loki",
-    number: "9380320892",
-    vehicleType: "big car",
-    score: 548,
-    totalBookings: 18,
-    rating: 4.6,
-    status: "active",
-  },
-  {
-    id: "3",
-    name: "Sathish",
-    number: "9141352476",
-    vehicleType: "tt",
-    score: 502,
-    totalBookings: 15,
-    rating: 4.5,
-    status: "active",
-  },
-  {
-    id: "4",
-    name: "Babu",
-    number: "9901225482",
-    vehicleType: "tt",
-    score: 436,
-    totalBookings: 12,
-    rating: 4.3,
-    status: "inactive",
-  },
-  {
-    id: "5",
-    name: "Rohith",
-    number: "7676911516",
-    vehicleType: "big car",
-    score: 410,
-    totalBookings: 11,
-    rating: 4.2,
-    status: "active",
-  },
-];
-
 const GuideScore = () => {
-  const [guides, setGuides] = useState<Guide[]>(mockGuides);
+  const [guides, setGuides] = useState<Guide[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddingGuide, setIsAddingGuide] = useState(false);
   const [editingGuide, setEditingGuide] = useState<Guide | null>(null);
   const [newGuide, setNewGuide] = useState<Partial<Guide>>({
     name: "",
     number: "",
-    vehicleType: "",
+    vehicle_type: "",
     score: 0,
-    totalBookings: 0,
+    total_bookings: 0,
     rating: 0,
     status: "active",
   });
+  const [loading, setLoading] = useState(true);
 
   const { toast } = useToast();
+  const { getGuides, createGuide, updateGuide, deleteGuide } = useApi();
+
+  useEffect(() => {
+    fetchGuides();
+  }, []);
+
+  const fetchGuides = async () => {
+    try {
+      setLoading(true);
+      const response = await getGuides();
+
+      // Check if response has guides array or if it's the array itself
+      const guidesData = Array.isArray(response)
+        ? response
+        : (response as { guides?: ApiGuide[] })?.guides || [];
+
+      // Transform API data to match our interface
+      const transformedGuides: Guide[] = guidesData.map((guide: ApiGuide) => ({
+        id: guide.id.toString(),
+        name: guide.name,
+        number: guide.number,
+        vehicle_type: guide.vehicle_type,
+        score: guide.score,
+        total_bookings: guide.total_bookings,
+        rating:
+          typeof guide.rating === "string"
+            ? parseFloat(guide.rating)
+            : guide.rating,
+        status: guide.status as "active" | "inactive",
+      }));
+
+      setGuides(transformedGuides);
+    } catch (error) {
+      console.error("Error fetching guides:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch guides data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredGuides = useMemo(() => {
     return guides.filter(
       (guide) =>
         guide.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         guide.number.includes(searchTerm) ||
-        guide.vehicleType.toLowerCase().includes(searchTerm.toLowerCase())
+        guide.vehicle_type.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [guides, searchTerm]);
 
@@ -124,8 +117,8 @@ const GuideScore = () => {
     return [...guides].sort((a, b) => b.score - a.score).slice(0, 3);
   }, [guides]);
 
-  const handleAddGuide = () => {
-    if (!newGuide.name || !newGuide.number || !newGuide.vehicleType) {
+  const handleAddGuide = async () => {
+    if (!newGuide.name || !newGuide.number || !newGuide.vehicle_type) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields",
@@ -134,33 +127,42 @@ const GuideScore = () => {
       return;
     }
 
-    const guide: Guide = {
-      id: Date.now().toString(),
-      name: newGuide.name || "",
-      number: newGuide.number || "",
-      vehicleType: newGuide.vehicleType || "",
-      score: newGuide.score || 0,
-      totalBookings: newGuide.totalBookings || 0,
-      rating: newGuide.rating || 0,
-      status: (newGuide.status as "active" | "inactive") || "active",
-    };
+    try {
+      const success = await createGuide({
+        name: newGuide.name || "",
+        number: newGuide.number || "",
+        vehicle_type: newGuide.vehicle_type || "",
+        score: newGuide.score || 0,
+        total_bookings: newGuide.total_bookings || 0,
+        rating: newGuide.rating || 0,
+        status: newGuide.status || "active",
+      });
 
-    setGuides([...guides, guide]);
-    setNewGuide({
-      name: "",
-      number: "",
-      vehicleType: "",
-      score: 0,
-      totalBookings: 0,
-      rating: 0,
-      status: "active",
-    });
-    setIsAddingGuide(false);
+      if (success) {
+        setNewGuide({
+          name: "",
+          number: "",
+          vehicle_type: "",
+          score: 0,
+          total_bookings: 0,
+          rating: 0,
+          status: "active",
+        });
+        setIsAddingGuide(false);
+        await fetchGuides(); // Refresh the list
 
-    toast({
-      title: "Guide Added",
-      description: "New guide has been successfully added",
-    });
+        toast({
+          title: "Guide Added",
+          description: "New guide has been successfully added",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add guide",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleEditGuide = (guide: Guide) => {
@@ -168,39 +170,64 @@ const GuideScore = () => {
     setNewGuide(guide);
   };
 
-  const handleUpdateGuide = () => {
+  const handleUpdateGuide = async () => {
     if (!editingGuide) return;
 
-    const updatedGuides = guides.map((g) =>
-      g.id === editingGuide.id
-        ? ({ ...newGuide, id: editingGuide.id } as Guide)
-        : g
-    );
+    try {
+      const success = await updateGuide(parseInt(editingGuide.id), {
+        name: newGuide.name || "",
+        number: newGuide.number || "",
+        vehicle_type: newGuide.vehicle_type || "",
+        score: newGuide.score || 0,
+        total_bookings: newGuide.total_bookings || 0,
+        rating: newGuide.rating || 0,
+        status: newGuide.status || "active",
+      });
 
-    setGuides(updatedGuides);
-    setEditingGuide(null);
-    setNewGuide({
-      name: "",
-      number: "",
-      vehicleType: "",
-      score: 0,
-      totalBookings: 0,
-      rating: 0,
-      status: "active",
-    });
+      if (success) {
+        setEditingGuide(null);
+        setNewGuide({
+          name: "",
+          number: "",
+          vehicle_type: "",
+          score: 0,
+          total_bookings: 0,
+          rating: 0,
+          status: "active",
+        });
+        await fetchGuides(); // Refresh the list
 
-    toast({
-      title: "Guide Updated",
-      description: "Guide information has been successfully updated",
-    });
+        toast({
+          title: "Guide Updated",
+          description: "Guide information has been successfully updated",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update guide",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteGuide = (id: string) => {
-    setGuides(guides.filter((g) => g.id !== id));
-    toast({
-      title: "Guide Removed",
-      description: "Guide has been successfully removed",
-    });
+  const handleDeleteGuide = async (id: string) => {
+    try {
+      const success = await deleteGuide(parseInt(id));
+      if (success) {
+        await fetchGuides(); // Refresh the list
+        toast({
+          title: "Guide Removed",
+          description: "Guide has been successfully removed",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete guide",
+        variant: "destructive",
+      });
+    }
   };
 
   const getScoreColor = (score: number) => {
@@ -214,6 +241,15 @@ const GuideScore = () => {
       ? "bg-green-500/20 text-green-400 border-green-500/30"
       : "bg-gray-500/20 text-gray-400 border-gray-500/30";
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader className="w-8 h-8 animate-spin text-primary" />
+        <span className="ml-2">Loading guides data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -268,11 +304,11 @@ const GuideScore = () => {
               </div>
 
               <div>
-                <Label htmlFor="vehicleType">Vehicle Type *</Label>
+                <Label htmlFor="vehicle_type">Vehicle Type *</Label>
                 <Select
-                  value={newGuide.vehicleType}
+                  value={newGuide.vehicle_type}
                   onValueChange={(value) =>
-                    setNewGuide({ ...newGuide, vehicleType: value })
+                    setNewGuide({ ...newGuide, vehicle_type: value })
                   }
                 >
                   <SelectTrigger className="glass-input">
@@ -326,6 +362,27 @@ const GuideScore = () => {
                 </div>
               </div>
 
+              <div>
+                <Label>Status</Label>
+                <Select
+                  value={newGuide.status}
+                  onValueChange={(value) =>
+                    setNewGuide({
+                      ...newGuide,
+                      status: value as "active" | "inactive",
+                    })
+                  }
+                >
+                  <SelectTrigger className="glass-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass-card border-border">
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button
                 onClick={handleAddGuide}
                 variant="gradient-primary"
@@ -353,7 +410,7 @@ const GuideScore = () => {
                       {guide.name}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {guide.vehicleType}
+                      {guide.vehicle_type}
                     </p>
                   </div>
                 </div>
@@ -369,7 +426,7 @@ const GuideScore = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Bookings</span>
-                  <span className="font-medium">{guide.totalBookings}</span>
+                  <span className="font-medium">{guide.total_bookings}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Rating</span>
@@ -440,7 +497,7 @@ const GuideScore = () => {
                     </td>
                     <td className="p-4">
                       <Badge variant="outline" className="capitalize">
-                        {guide.vehicleType}
+                        {guide.vehicle_type}
                       </Badge>
                     </td>
                     <td className="p-4">
@@ -452,7 +509,7 @@ const GuideScore = () => {
                         {guide.score}
                       </span>
                     </td>
-                    <td className="p-4 text-center">{guide.totalBookings}</td>
+                    <td className="p-4 text-center">{guide.total_bookings}</td>
                     <td className="p-4">
                       <div className="flex items-center gap-1">
                         <span>⭐</span>
@@ -521,11 +578,11 @@ const GuideScore = () => {
                                   Vehicle Type
                                 </Label>
                                 <Select
-                                  value={newGuide.vehicleType}
+                                  value={newGuide.vehicle_type}
                                   onValueChange={(value) =>
                                     setNewGuide({
                                       ...newGuide,
-                                      vehicleType: value,
+                                      vehicle_type: value,
                                     })
                                   }
                                 >
@@ -566,11 +623,11 @@ const GuideScore = () => {
                                   <Input
                                     id="editBookings"
                                     type="number"
-                                    value={newGuide.totalBookings}
+                                    value={newGuide.total_bookings}
                                     onChange={(e) =>
                                       setNewGuide({
                                         ...newGuide,
-                                        totalBookings:
+                                        total_bookings:
                                           parseInt(e.target.value) || 0,
                                       })
                                     }
@@ -653,7 +710,9 @@ const GuideScore = () => {
             <div className="text-center py-12">
               <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">
-                No guides found matching your search
+                {guides.length === 0
+                  ? "No guides found. Add your first guide to get started."
+                  : "No guides found matching your search"}
               </p>
             </div>
           )}

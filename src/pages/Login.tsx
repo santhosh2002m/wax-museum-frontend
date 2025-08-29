@@ -4,37 +4,39 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { Eye, EyeOff } from "lucide-react";
 import cityscapeImage from "../../public/bg.webp";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login process
-    setTimeout(() => {
-      if (username && password) {
-        toast({
-          title: "Login Successful",
-          description: "Welcome to Wax Museum Dashboard",
-        });
+    try {
+      const success = await login(username, password);
+      console.log(success);
+
+      if (success) {
         navigate("/dashboard");
-      } else {
-        toast({
-          title: "Login Failed",
-          description: "Please enter both username and password",
-          variant: "destructive",
-        });
+        console.log("sucess");
       }
+    } catch (error) {
+      // Error handling is already done in the AuthContext
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
+  };
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
@@ -90,15 +92,29 @@ const Login = () => {
               <Label htmlFor="password" className="text-foreground font-medium">
                 Password
               </Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="glass-input h-12 text-foreground placeholder-muted-foreground border-primary/20 focus:border-primary focus:ring-primary/20 transition-all duration-300"
-                placeholder="Enter your password"
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="glass-input h-12 text-foreground placeholder-muted-foreground border-primary/20 focus:border-primary focus:ring-primary/20 transition-all duration-300 pr-10"
+                  placeholder="Enter your password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={togglePasswordVisibility}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-200"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <Button

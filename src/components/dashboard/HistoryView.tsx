@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Calendar,
@@ -6,98 +6,88 @@ import {
   Eye,
   SortAsc,
   SortDesc,
+  Loader,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useApi } from "@/contexts/ApiContext";
 
 interface HistoryRecord {
-  id: string;
-  invoiceNo: string;
-  guideName: string;
-  guideNumber: string;
-  vehicleType: string;
-  date: string;
-  showName: string;
+  id: number;
+  invoice_no: string;
+  guide_name: string;
+  guide_number: string;
+  vehicle_type: string;
+  createdAt: string;
+  show_name: string;
   adults: number;
-  totalPaid: number;
+  final_amount: number;
   status: "completed" | "pending" | "cancelled";
 }
 
-// Mock data - in a real app, this would come from an API
-const mockHistoryData: HistoryRecord[] = [
-  {
-    id: "1",
-    invoiceNo: "INV001",
-    guideName: "Rahman",
-    guideNumber: "9019296034",
-    vehicleType: "guide",
-    date: "2024-01-15",
-    showName: "Celebrity Wax Museum",
-    adults: 4,
-    totalPaid: 646,
-    status: "completed",
-  },
-  {
-    id: "2",
-    invoiceNo: "INV002",
-    guideName: "Loki",
-    guideNumber: "9380320892",
-    vehicleType: "big car",
-    date: "2024-01-14",
-    showName: "Horror Show",
-    adults: 6,
-    totalPaid: 548,
-    status: "completed",
-  },
-  {
-    id: "3",
-    invoiceNo: "INV003",
-    guideName: "Sathish",
-    guideNumber: "9141352476",
-    vehicleType: "tt",
-    date: "2024-01-13",
-    showName: "History Museum",
-    adults: 3,
-    totalPaid: 502,
-    status: "pending",
-  },
-  {
-    id: "4",
-    invoiceNo: "INV004",
-    guideName: "Babu",
-    guideNumber: "9901225482",
-    vehicleType: "tt",
-    date: "2024-01-12",
-    showName: "Celebrity Wax Museum",
-    adults: 2,
-    totalPaid: 436,
-    status: "completed",
-  },
-  {
-    id: "5",
-    invoiceNo: "INV005",
-    guideName: "Rohith",
-    guideNumber: "7676911516",
-    vehicleType: "big car",
-    date: "2024-01-11",
-    showName: "Horror Show",
-    adults: 5,
-    totalPaid: 410,
-    status: "cancelled",
-  },
-];
+interface ApiTicketsResponse {
+  tickets: HistoryRecord[];
+  total: number;
+}
 
 type SortField = keyof HistoryRecord;
 type SortDirection = "asc" | "desc";
 
 const HistoryView = () => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [historyData, setHistoryData] = useState<HistoryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { getTickets } = useApi();
+
+  useEffect(() => {
+    fetchHistoryData();
+  }, []);
+
+  const fetchHistoryData = async () => {
+    try {
+      setLoading(true);
+      const response = await getTickets();
+
+      // Check if response has tickets array or if it's the array itself
+      const ticketsData = Array.isArray(response)
+        ? response
+        : (response as ApiTicketsResponse)?.tickets || [];
+
+      // Transform API data to match HistoryRecord interface
+      const transformedData: HistoryRecord[] = ticketsData.map(
+        (ticket: any) => ({
+          id: ticket.id,
+          invoice_no:
+            ticket.invoice_no || `TKT${ticket.id.toString().padStart(4, "0")}`,
+          guide_name: ticket.guide_name,
+          guide_number: ticket.guide_number,
+          vehicle_type: ticket.vehicle_type,
+          createdAt: ticket.createdAt,
+          show_name: ticket.show_name,
+          adults: ticket.adults,
+          final_amount: ticket.final_amount,
+          status: ticket.status || "completed",
+        })
+      );
+
+      setHistoryData(transformedData);
+    } catch (error) {
+      console.error("Error fetching history data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch history data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -109,20 +99,20 @@ const HistoryView = () => {
   };
 
   const filteredAndSortedData = useMemo(() => {
-    let filtered = mockHistoryData.filter(
+    let filtered = historyData.filter(
       (record) =>
-        record.guideName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.guideNumber.includes(searchTerm) ||
-        record.vehicleType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.showName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase())
+        record.guide_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        record.guide_number?.includes(searchTerm) ||
+        record.vehicle_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        record.show_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        record.invoice_no?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     filtered.sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
 
-      if (sortField === "date") {
+      if (sortField === "createdAt") {
         aValue = new Date(aValue as string).getTime();
         bValue = new Date(bValue as string).getTime();
       }
@@ -138,7 +128,7 @@ const HistoryView = () => {
     });
 
     return filtered;
-  }, [searchTerm, sortField, sortDirection]);
+  }, [searchTerm, sortField, sortDirection, historyData]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -156,7 +146,7 @@ const HistoryView = () => {
   const handleViewDetails = (record: HistoryRecord) => {
     toast({
       title: "Viewing Details",
-      description: `Opening details for ${record.guideName}`,
+      description: `Opening details for ${record.guide_name}`,
     });
   };
 
@@ -175,6 +165,15 @@ const HistoryView = () => {
       <SortDesc className="w-4 h-4 ml-1" />
     );
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader className="w-8 h-8 animate-spin text-primary" />
+        <span className="ml-2">Loading history data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -219,7 +218,7 @@ const HistoryView = () => {
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="neon-text-accent">
-            Recent Transactions
+            Recent Transactions ({historyData.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -229,56 +228,56 @@ const HistoryView = () => {
                 <tr className="text-left">
                   <th
                     className="p-4 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => handleSort("invoiceNo")}
+                    onClick={() => handleSort("invoice_no")}
                   >
                     <div className="flex items-center">
                       Invoice No
-                      <SortIcon field="invoiceNo" />
+                      <SortIcon field="invoice_no" />
                     </div>
                   </th>
                   <th
                     className="p-4 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => handleSort("guideName")}
+                    onClick={() => handleSort("guide_name")}
                   >
                     <div className="flex items-center">
                       Guide Name
-                      <SortIcon field="guideName" />
+                      <SortIcon field="guide_name" />
                     </div>
                   </th>
                   <th
                     className="p-4 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => handleSort("guideNumber")}
+                    onClick={() => handleSort("guide_number")}
                   >
                     <div className="flex items-center">
                       Guide Number
-                      <SortIcon field="guideNumber" />
+                      <SortIcon field="guide_number" />
                     </div>
                   </th>
                   <th
                     className="p-4 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => handleSort("vehicleType")}
+                    onClick={() => handleSort("vehicle_type")}
                   >
                     <div className="flex items-center">
                       Vehicle Type
-                      <SortIcon field="vehicleType" />
+                      <SortIcon field="vehicle_type" />
                     </div>
                   </th>
                   <th
                     className="p-4 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => handleSort("date")}
+                    onClick={() => handleSort("createdAt")}
                   >
                     <div className="flex items-center">
                       Date
-                      <SortIcon field="date" />
+                      <SortIcon field="createdAt" />
                     </div>
                   </th>
                   <th
                     className="p-4 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => handleSort("showName")}
+                    onClick={() => handleSort("show_name")}
                   >
                     <div className="flex items-center">
                       Show Name
-                      <SortIcon field="showName" />
+                      <SortIcon field="show_name" />
                     </div>
                   </th>
                   <th
@@ -292,11 +291,11 @@ const HistoryView = () => {
                   </th>
                   <th
                     className="p-4 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => handleSort("totalPaid")}
+                    onClick={() => handleSort("final_amount")}
                   >
                     <div className="flex items-center">
                       Total Paid
-                      <SortIcon field="totalPaid" />
+                      <SortIcon field="final_amount" />
                     </div>
                   </th>
                   <th className="p-4 font-semibold text-foreground">Status</th>
@@ -311,25 +310,25 @@ const HistoryView = () => {
                     style={{ animationDelay: `${index * 0.05}s` }}
                   >
                     <td className="p-4 font-mono text-primary">
-                      {record.invoiceNo}
+                      {record.invoice_no}
                     </td>
-                    <td className="p-4 font-medium">{record.guideName}</td>
+                    <td className="p-4 font-medium">{record.guide_name}</td>
                     <td className="p-4 font-mono text-muted-foreground">
-                      {record.guideNumber}
+                      {record.guide_number}
                     </td>
                     <td className="p-4">
                       <Badge variant="outline" className="capitalize">
-                        {record.vehicleType}
+                        {record.vehicle_type}
                       </Badge>
                     </td>
                     <td className="p-4 text-muted-foreground">
-                      {new Date(record.date).toLocaleDateString()}
+                      {new Date(record.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="p-4">{record.showName}</td>
+                    <td className="p-4">{record.show_name}</td>
                     <td className="p-4 text-center">{record.adults}</td>
                     <td className="p-4">
                       <span className="font-bold neon-text-accent">
-                        ₹{record.totalPaid}
+                        ₹{record.final_amount}
                       </span>
                     </td>
                     <td className="p-4">
@@ -357,7 +356,9 @@ const HistoryView = () => {
             <div className="text-center py-12">
               <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">
-                No records found matching your search
+                {historyData.length === 0
+                  ? "No transaction history found"
+                  : "No records found matching your search"}
               </p>
             </div>
           )}

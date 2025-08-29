@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useApi } from "@/contexts/ApiContext";
 
 interface TicketData {
   id: string;
@@ -41,6 +42,7 @@ const TicketManager = () => {
   });
 
   const { toast } = useToast();
+  const { createTicket, loading } = useApi();
 
   const calculateTotals = (updatedTicket: Partial<TicketData>) => {
     const adults = updatedTicket.adults || 0;
@@ -73,7 +75,7 @@ const TicketManager = () => {
     }
   };
 
-  const addTicket = () => {
+  const addTicket = async () => {
     if (
       !currentTicket.vehicleType ||
       !currentTicket.guideName ||
@@ -87,36 +89,55 @@ const TicketManager = () => {
       return;
     }
 
-    const newTicket: TicketData = {
-      id: Date.now().toString(),
-      vehicleType: currentTicket.vehicleType || "",
-      guideName: currentTicket.guideName || "",
-      guideNumber: currentTicket.guideNumber || "",
-      showName: currentTicket.showName || "",
+    // Prepare data for API
+    const ticketData = {
+      vehicle_type: currentTicket.vehicleType || "",
+      guide_name: currentTicket.guideName || "",
+      guide_number: currentTicket.guideNumber || "",
+      show_name: currentTicket.showName || "",
       adults: currentTicket.adults || 0,
-      ticketPrice: currentTicket.ticketPrice || 0,
-      totalPrice: currentTicket.totalPrice || 0,
+      ticket_price: currentTicket.ticketPrice || 0,
+      total_price: currentTicket.totalPrice || 0,
       tax: currentTicket.tax || 0,
-      finalAmount: currentTicket.finalAmount || 0,
+      final_amount: currentTicket.finalAmount || 0,
     };
 
-    setTickets([...tickets, newTicket]);
-    setCurrentTicket({
-      vehicleType: "",
-      guideName: "",
-      guideNumber: "",
-      showName: "",
-      adults: 0,
-      ticketPrice: 0,
-      totalPrice: 0,
-      tax: 0,
-      finalAmount: 0,
-    });
+    // Call API to create ticket
+    const success = await createTicket(ticketData);
 
-    toast({
-      title: "Ticket Added",
-      description: "New ticket has been successfully added",
-    });
+    if (success) {
+      // Add to local state only if API call was successful
+      const newTicket: TicketData = {
+        id: Date.now().toString(),
+        vehicleType: currentTicket.vehicleType || "",
+        guideName: currentTicket.guideName || "",
+        guideNumber: currentTicket.guideNumber || "",
+        showName: currentTicket.showName || "",
+        adults: currentTicket.adults || 0,
+        ticketPrice: currentTicket.ticketPrice || 0,
+        totalPrice: currentTicket.totalPrice || 0,
+        tax: currentTicket.tax || 0,
+        finalAmount: currentTicket.finalAmount || 0,
+      };
+
+      setTickets([...tickets, newTicket]);
+      setCurrentTicket({
+        vehicleType: "",
+        guideName: "",
+        guideNumber: "",
+        showName: "",
+        adults: 0,
+        ticketPrice: 0,
+        totalPrice: 0,
+        tax: 0,
+        finalAmount: 0,
+      });
+
+      toast({
+        title: "Ticket Added",
+        description: "New ticket has been successfully added",
+      });
+    }
   };
 
   const removeTicket = (id: string) => {
@@ -313,8 +334,9 @@ const TicketManager = () => {
                 onClick={addTicket}
                 variant="gradient-primary"
                 className="w-full"
+                disabled={loading}
               >
-                Add Ticket
+                {loading ? "Adding Ticket..." : "Add Ticket"}
               </Button>
             </div>
           </CardContent>
